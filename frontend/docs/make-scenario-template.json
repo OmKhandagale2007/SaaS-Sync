@@ -1,0 +1,111 @@
+{
+  "name": "Excel-CRM-Invoice Automation",
+  "description": "Automated data flow from Excel to CRM and Invoicing Systems",
+  "version": "1.0",
+  "modules": [
+    {
+      "id": "excel-watch-rows",
+      "type": "excel:watchRows",
+      "settings": {
+        "spreadsheetId": "{{YOUR_SPREADSHEET_ID}}",
+        "worksheetName": "Customers",
+        "range": "A2:G",
+        "watchColumn": "A",
+        "pollingInterval": 5
+      },
+      "outputs": {
+        "customerName": "B",
+        "email": "C",
+        "phone": "D",
+        "product": "E",
+        "amount": "F",
+        "dueDate": "G"
+      }
+    },
+    {
+      "id": "crm-create-contact",
+      "type": "crm:createContact",
+      "dependsOn": ["excel-watch-rows"],
+      "settings": {
+        "apiCredentials": "{{YOUR_CRM_CREDENTIALS}}",
+        "mapping": {
+          "firstName": "{{excel-watch-rows.customerName}}",
+          "lastName": "",
+          "email": "{{excel-watch-rows.email}}",
+          "phone": "{{excel-watch-rows.phone}}",
+          "customFields": {
+            "product_interest": "{{excel-watch-rows.product}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "crm-create-deal",
+      "type": "crm:createDeal",
+      "dependsOn": ["crm-create-contact"],
+      "settings": {
+        "apiCredentials": "{{YOUR_CRM_CREDENTIALS}}",
+        "mapping": {
+          "contactId": "{{crm-create-contact.id}}",
+          "dealName": "{{excel-watch-rows.product}} - {{excel-watch-rows.customerName}}",
+          "value": "{{excel-watch-rows.amount}}",
+          "closeDate": "{{excel-watch-rows.dueDate}}",
+          "stage": "Proposal"
+        }
+      }
+    },
+    {
+      "id": "invoice-create",
+      "type": "invoicing:createInvoice",
+      "dependsOn": ["crm-create-deal"],
+      "settings": {
+        "apiCredentials": "{{YOUR_INVOICING_CREDENTIALS}}",
+        "mapping": {
+          "clientId": "{{crm-create-contact.id}}",
+          "lineItems": [
+            {
+              "description": "{{excel-watch-rows.product}}",
+              "quantity": 1,
+              "amount": "{{excel-watch-rows.amount}}"
+            }
+          ],
+          "dueDate": "{{excel-watch-rows.dueDate}}",
+          "terms": "Net 30"
+        }
+      }
+    },
+    {
+      "id": "crm-update-deal",
+      "type": "crm:updateDeal",
+      "dependsOn": ["invoice-create"],
+      "settings": {
+        "apiCredentials": "{{YOUR_CRM_CREDENTIALS}}",
+        "dealId": "{{crm-create-deal.id}}",
+        "updates": {
+          "customFields": {
+            "invoice_number": "{{invoice-create.invoiceNumber}}",
+            "invoice_status": "sent"
+          }
+        }
+      }
+    },
+    {
+      "id": "error-handler",
+      "type": "router:condition",
+      "dependsOn": ["invoice-create"],
+      "conditions": [
+        {
+          "if": "{{invoice-create.status}} equals 'error'",
+          "then": [
+            {
+              "type": "email:send",
+              "to": "admin@yourcompany.com",
+              "subject": "Integration Error - Invoice Creation Failed",
+              "body": "Failed to create invoice for {{excel-watch-rows.customerName}}. Error: {{invoice-create.error}}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
