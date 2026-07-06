@@ -1,82 +1,53 @@
-# SyncLine — full-stack version
+# SyncLine
 
-Your original `SaaS.zip` was a single static `index.html`: all "sync" logic
-(dedup, invoice generation, the 1,000-ops counter) ran in browser JavaScript
-and vanished on every refresh. This adds a real backend underneath it and
-wires the same frontend UI up to real API calls.
+An interactive, 3D-styled prototype that simulates a no-code data sync pipeline between **Excel/Google Sheets → CRM → Invoicing** software. Built for SMEs who want to see how automated field mapping, contact deduplication, and invoice generation would work before wiring up real API credentials (e.g. in Make.com, Zapier, or n8n).
 
-```
-build/
-  backend/    ← FastAPI + SQLAlchemy API (Python)
-  frontend/   ← your original index.html, now calling the API
-```
+**[Live demo →](#deploying-with-github-pages)** (enable GitHub Pages — see below)
 
-## What changed, and why this stack
+## What it does
 
-You said you want this to double as practice for a data science / ML
-engineering track — that's why the backend is **Python** (FastAPI +
-SQLAlchemy) rather than Node: it's the same language ecosystem you'll use
-for pandas, scikit-learn, PyTorch, etc., and FastAPI's type-hint-driven
-style is close to how you'll write typed Python elsewhere. CSV parsing uses
-**pandas** instead of hand-rolled string splitting — a small dose of the
-tabular-data habits you'll use constantly later.
+- Load a sample sheet or upload your own CSV (`Customer Name, Email, Phone, Product, Amount, Due Date`)
+- Click **Run sync** and watch data animate through three stages: Spreadsheet → CRM → Invoicing
+- **Deduplicates contacts by email** — repeat customers update an existing CRM record instead of creating a duplicate
+- **Filters invoices** — only generates an invoice when `Amount > 0`
+- Tracks a simulated **Make.com-style operations counter** against the 1,000/month free tier
+- Live sync log of every action taken
+- Export the resulting invoice batch as a CSV
 
-What you now have that the static demo didn't:
+This is a self-contained front-end simulation — no backend, no real API calls, no data leaves the browser. It's meant as a working spec / demo you can point non-technical stakeholders to, or a starting point for wiring up real Make.com / Zapier / n8n scenarios and CRM & invoicing APIs.
 
-- **Real persistence** — Postgres (or SQLite for zero-setup local dev) instead of a JS `Map` that resets on refresh
-- **Multi-tenant accounts** — signup/login (JWT), each organization only ever sees its own contacts/invoices
-- **Server-side dedup + invoice generation** — same rules as before (dedupe by email, invoice only if amount > 0), now enforced by a DB unique constraint, not just JS logic anyone could bypass
-- **Real integration hooks** — `backend/app/services/integrations/hubspot.py` and `quickbooks.py` make actual HubSpot/QuickBooks API calls once you connect real OAuth credentials; until then they no-op exactly like the old simulation
-- **CSV export** streamed from the server's real invoice table
+## Tech
 
-## Running it locally
+Single-file static site: plain HTML, CSS, and JavaScript.
 
-### 1. Backend
+- [PapaParse](https://www.papaparse.com/) (via CDN) for CSV parsing
+- Google Fonts: Space Grotesk, Fraunces, JetBrains Mono
+- No build step, no dependencies to install
+
+## Running locally
+
+Just open `index.html` in a browser. Or serve it locally:
+
 ```bash
-cd backend
-cp .env.example .env        # edit JWT_SECRET at minimum
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+python3 -m http.server 8000
+# then visit http://localhost:8000
 ```
-This uses SQLite (`syncline.db`) by default — nothing else to install.
-Interactive API docs: http://localhost:8000/docs
 
-**Want Postgres instead** (closer to a real production setup)?
-```bash
-docker compose up --build
-```
-This starts Postgres + the API together, wired via `DATABASE_URL` in `docker-compose.yml`.
+## Deploying with GitHub Pages
 
-### 2. Frontend
-```bash
-cd frontend
-python3 -m http.server 5500
-```
-Visit http://localhost:5500. The page will prompt you to sign up / log in
-(that's expected — it's now a real multi-tenant app instead of an anonymous
-demo). It talks to `http://localhost:8000` by default; change `API_BASE`
-near the top of the `<script>` block in `index.html` if you deploy the API
-elsewhere.
+1. Push this repo to GitHub.
+2. Go to **Settings → Pages**.
+3. Under **Build and deployment**, set **Source** to `Deploy from a branch`, branch `main`, folder `/ (root)`.
+4. Save — your site will be live at `https://<your-username>.github.io/<repo-name>/` within a minute or two.
 
-> I wasn't able to actually spin up and click through the running app in
-> this environment (no outbound network access here to install the Python
-> packages), so please run through signup → load sample → run sync →
-> export once locally and tell me if anything misbehaves — I'll fix it fast.
+## Customizing
 
-## Going from "connected" to real HubSpot/QuickBooks data
+Everything lives in `index.html`:
 
-1. Register a developer app with HubSpot / Intuit, get a client ID + secret
-2. Put them in `backend/.env` (`HUBSPOT_CLIENT_ID`, etc.)
-3. Click **Connect** next to that provider in the app — it's a real OAuth redirect
-4. From then on, every sync run also pushes real contacts/deals/invoices to that provider
+- Colors are defined as CSS variables at the top of the `<style>` block (`:root { ... }`) — change these to re-theme the whole site.
+- Sample data is in the `SAMPLE` constant near the top of the `<script>` block.
+- Sync logic (dedup, filtering, invoice numbering) lives in the `runSync()` function.
 
-If you skip this, integrations just stay in "simulated" mode — the sync
-still works, it just doesn't call out anywhere.
+## License
 
-## Suggested next steps as you learn
-
-- Swap `Base.metadata.create_all()` for **Alembic** migrations once the schema stabilizes
-- Add rate limiting / refresh tokens to the auth flow before any real users touch it
-- Add tests (`pytest` + `httpx.AsyncClient`) around `services/sync_engine.py` — it's the one piece of business logic worth locking down first
-- If you want async DB access (good practice for I/O-bound APIs), migrate from `sqlalchemy.orm.Session` to `AsyncSession` + `asyncpg`
+MIT — see [LICENSE](LICENSE).
